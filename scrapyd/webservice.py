@@ -181,3 +181,75 @@ class DeleteVersion(DeleteProject):
         self._delete_version(project, version)
         UtilsCache.invalid_cache(project)
         return {"node_name": self.root.nodename, "status": "ok"}
+
+
+class ListAll(WsResource):
+
+    def render_GET(self, txrequest):
+        pending = sum(q.count() for q in self.root.poller.queues.values())
+        running = len(self.root.launcher.processes)
+        finished = len(self.root.launcher.finished)
+        projects = list(self.root.scheduler.list_projects())
+        pinfo={
+            "projects":{},
+        }
+        for project in projects:
+            pinfo["projects"][project]=[]
+            versions = self.root.eggstorage.list(project)
+            for version in versions:
+                vinfo={
+                        'id':version,
+                        'spiders':get_spider_list(project, version=version),
+                    }
+                pinfo['projects'][project].append(vinfo)
+
+        final={
+            "node_name": self.root.nodename,
+            "status": "ok",
+            "pending": pending,
+            "running": running,
+            "finished": finished,
+            **pinfo,
+            }
+        return final
+
+
+class ListOverview(WsResource):
+    def render_GET(self, txrequest):
+        pending = sum(q.count() for q in self.root.poller.queues.values())
+        running = len(self.root.launcher.processes)
+        finished = len(self.root.launcher.finished)
+        projects = list(self.root.scheduler.list_projects())
+        total_unique_spiders = 0
+        pinfo={
+            "projects":{},
+        }
+        for project in projects:
+            pinfo["projects"][project]=[]
+            versions = self.root.eggstorage.list(project)
+            versionslen=len(versions)
+            unique_spiders=[]
+            for version in versions:
+                version_spiders=get_spider_list(project, version=version)
+                unique_spiders.extend(version_spiders)
+
+            unique_spiders_count=len(set(unique_spiders))
+            total_unique_spiders+=unique_spiders_count
+            pinfo['projects'][project].append({
+                'versions_count':versionslen,
+                'versions':versions,
+                'unq_spiders_count':unique_spiders_count,
+                'unq_spiders':list(set(unique_spiders)),
+            })
+
+
+        final={
+            "node_name": self.root.nodename,
+            "status": "ok",
+            "pending": pending,
+            "running": running,
+            "finished": finished,
+            "total_unique_spiders":total_unique_spiders,
+            **pinfo,
+            }
+        return final
